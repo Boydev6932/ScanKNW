@@ -1,0 +1,442 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>สแกนชื่อ AI — แก่นนครวิทยาลัย ROTC</title>
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/fuse.js@7.0.0/dist/fuse.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;600;700&family=Chakra+Petch:wght@400;600;700&family=Space+Grotesk:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#0a0c10;--panel:#12151c;--panel2:#181d27;--panel3:#1e2535;
+  --border:#232b3e;--border2:#2e3a52;--border3:#3d4f6e;
+  --blue:#3b82f6;--blue2:#60a5fa;--blue3:#93c5fd;
+  --red:#ef4444;--red2:#f87171;
+  --green:#22c55e;--green2:#4ade80;
+  --gold:#f59e0b;--gold2:#fbbf24;
+  --text:#f1f5f9;--text2:#94a3b8;--text3:#475569;
+  --gB:0 0 20px rgba(59,130,246,0.4),0 0 40px rgba(59,130,246,0.1);
+  --gG:0 0 20px rgba(34,197,94,0.3),0 0 40px rgba(34,197,94,0.1);
+  --gR:0 0 20px rgba(239,68,68,0.4),0 0 40px rgba(239,68,68,0.1);
+}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{background:var(--bg);color:var(--text);font-family:'Sarabun',sans-serif;min-height:100vh;overflow-x:hidden;}
+body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(rgba(59,130,246,0.03) 1px,transparent 1px),linear-gradient(90deg,rgba(59,130,246,0.03) 1px,transparent 1px);background-size:40px 40px;pointer-events:none;z-index:0;animation:gridMove 30s linear infinite;}
+@keyframes gridMove{0%{background-position:0 0}100%{background-position:40px 40px}}
+body::after{content:'';position:fixed;inset:0;background:radial-gradient(ellipse 60% 40% at 50% -10%,rgba(59,130,246,0.08) 0%,transparent 70%);pointer-events:none;z-index:0;}
+@keyframes fadeUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.5}}
+@keyframes spin{from{transform:rotate(0)}to{transform:rotate(360deg)}}
+@keyframes scanLine{0%{top:0%}100%{top:100%}}
+@keyframes resultSlide{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
+header{position:relative;z-index:20;padding:18px 24px 0;display:flex;align-items:center;justify-content:space-between;animation:fadeUp .5s ease;}
+.logo-th{font-family:'Chakra Petch',sans-serif;font-size:15px;font-weight:700;letter-spacing:.5px;}
+.logo-en{font-size:10px;color:var(--text3);letter-spacing:1.5px;text-transform:uppercase;margin-top:1px;}
+.hdr-right{display:flex;align-items:center;gap:12px;}
+.live-chip{display:flex;align-items:center;gap:7px;background:rgba(34,197,94,0.08);border:1px solid rgba(34,197,94,0.25);border-radius:20px;padding:5px 13px;font-family:'Space Grotesk',sans-serif;font-size:11px;color:var(--green2);font-weight:600;}
+.live-dot{width:7px;height:7px;background:var(--green2);border-radius:50%;box-shadow:0 0 6px var(--green2);animation:pulse 1.8s infinite;}
+.clock-box{background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:5px 12px;font-family:'Space Grotesk',sans-serif;font-size:13px;color:var(--text2);}
+.main{position:relative;z-index:10;max-width:1100px;margin:0 auto;padding:20px 24px 40px;display:grid;grid-template-columns:1fr 380px;gap:20px;}
+@media(max-width:900px){.main{grid-template-columns:1fr;padding:14px;}}
+.cam-wrap{background:var(--panel);border:1px solid var(--border);border-radius:16px;overflow:hidden;animation:fadeUp .5s ease .1s both;transition:border-color .3s,box-shadow .3s;position:relative;}
+.cam-wrap.found{border-color:var(--green);box-shadow:var(--gG);}
+.cam-wrap.notfound{border-color:var(--red);box-shadow:var(--gR);}
+.cam-header{padding:14px 18px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border);}
+.cam-title{font-family:'Chakra Petch',sans-serif;font-size:12px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--text3);}
+.cam-status{font-family:'Space Grotesk',sans-serif;font-size:11px;font-weight:700;padding:4px 10px;border-radius:20px;background:rgba(59,130,246,0.1);color:var(--blue2);border:1px solid rgba(59,130,246,0.2);transition:all .3s;}
+.cam-status.active{background:rgba(34,197,94,0.1);color:var(--green2);border-color:rgba(34,197,94,0.25);}
+.video-container{position:relative;background:#000;aspect-ratio:4/3;overflow:hidden;}
+#camVideo{width:100%;height:100%;object-fit:cover;display:block;}
+.scan-overlay{position:absolute;inset:0;pointer-events:none;opacity:0;transition:opacity .3s;}
+.scan-overlay.on{opacity:1;}
+.scan-corner{position:absolute;width:40px;height:40px;border-color:var(--blue2);border-style:solid;border-width:0;}
+.scan-corner.tl{top:16px;left:16px;border-top-width:3px;border-left-width:3px;}
+.scan-corner.tr{top:16px;right:16px;border-top-width:3px;border-right-width:3px;}
+.scan-corner.bl{bottom:16px;left:16px;border-bottom-width:3px;border-left-width:3px;}
+.scan-corner.br{bottom:16px;right:16px;border-bottom-width:3px;border-right-width:3px;}
+.scan-line{position:absolute;left:16px;right:16px;height:2px;background:linear-gradient(90deg,transparent,var(--blue2),transparent);animation:scanLine 2s ease-in-out infinite;box-shadow:0 0 8px var(--blue2);opacity:0;transition:opacity .3s;}
+.scan-overlay.on .scan-line{opacity:1;}
+#snapCanvas{display:none;}
+.focus-box{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:62%;height:42%;border:1px solid rgba(96,165,250,0.35);border-radius:4px;pointer-events:none;}
+.focus-label{position:absolute;top:-20px;left:0;right:0;text-align:center;font-family:'Space Grotesk',sans-serif;font-size:10px;color:rgba(96,165,250,0.6);letter-spacing:1px;}
+.start-overlay{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;background:rgba(10,12,16,0.92);gap:16px;transition:opacity .4s;}
+.start-overlay.hidden{opacity:0;pointer-events:none;}
+.start-btn{background:linear-gradient(135deg,var(--blue),#1d4ed8);border:none;border-radius:12px;color:#fff;font-family:'Sarabun',sans-serif;font-size:16px;font-weight:700;padding:14px 32px;cursor:pointer;box-shadow:var(--gB);transition:all .2s;display:flex;align-items:center;gap:10px;}
+.start-btn:hover{transform:translateY(-2px);box-shadow:0 0 30px rgba(59,130,246,0.5);}
+.start-hint{font-size:12px;color:var(--text3);}
+.ai-bar{padding:10px 18px;display:flex;align-items:center;gap:10px;border-top:1px solid var(--border);font-size:12px;color:var(--text3);font-family:'Space Grotesk',sans-serif;min-height:44px;}
+.ai-icon{font-size:16px;}
+#aiStatus{flex:1;transition:color .3s;}
+.conf-badge{font-size:10px;font-weight:700;padding:2px 8px;border-radius:4px;background:rgba(59,130,246,0.1);color:var(--blue2);border:1px solid rgba(59,130,246,0.2);}
+.right-panel{display:flex;flex-direction:column;gap:16px;animation:fadeUp .5s ease .2s both;}
+.result-card{background:var(--panel);border:1px solid var(--border);border-radius:14px;overflow:hidden;transition:all .3s;}
+.result-card.found{border-color:rgba(34,197,94,0.4);}
+.result-card.notfound{border-color:rgba(239,68,68,0.4);}
+.result-header{padding:14px 16px;border-bottom:1px solid var(--border);font-family:'Chakra Petch',sans-serif;font-size:11px;font-weight:700;letter-spacing:1.5px;color:var(--text3);text-transform:uppercase;}
+.result-body{padding:18px 16px;}
+.result-name{font-family:'Chakra Petch',sans-serif;font-size:22px;font-weight:700;color:var(--text);margin-bottom:6px;min-height:32px;}
+.result-status{font-family:'Space Grotesk',sans-serif;font-size:16px;font-weight:700;margin-bottom:12px;}
+.result-status.found{color:var(--green2);}
+.result-status.notfound{color:var(--red2);}
+.result-status.idle{color:var(--text3);}
+.result-meta{font-size:11px;color:var(--text3);font-family:'Space Grotesk',sans-serif;line-height:1.8;}
+.result-score{display:inline-block;background:rgba(34,197,94,0.1);color:var(--green2);border:1px solid rgba(34,197,94,0.2);border-radius:4px;padding:2px 8px;font-size:11px;font-weight:700;font-family:'Space Grotesk',sans-serif;}
+.result-score.low{background:rgba(245,158,11,0.1);color:var(--gold2);border-color:rgba(245,158,11,0.2);}
+.stats-row{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;}
+.mini-stat{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:12px 10px;text-align:center;}
+.mini-num{font-family:'Space Grotesk',sans-serif;font-size:22px;font-weight:700;}
+.mini-num.b{color:var(--blue2);}
+.mini-num.g{color:var(--green2);}
+.mini-num.r{color:var(--red2);}
+.mini-lbl{font-size:10px;color:var(--text3);margin-top:3px;}
+.db-card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:14px 16px;display:flex;align-items:center;gap:12px;font-size:12px;}
+.db-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;}
+.db-dot.ok{background:var(--green2);box-shadow:0 0 6px var(--green2);}
+.db-dot.loading{background:var(--gold2);animation:pulse 1s infinite;}
+.db-dot.err{background:var(--red2);}
+.db-info{flex:1;line-height:1.6;}
+.db-label{font-weight:700;color:var(--text);}
+.db-sub{color:var(--text3);font-size:11px;font-family:'Space Grotesk',sans-serif;}
+.recent-card{background:var(--panel);border:1px solid var(--border);border-radius:14px;flex:1;overflow:hidden;}
+.recent-header{padding:14px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;font-family:'Chakra Petch',sans-serif;font-size:11px;font-weight:700;letter-spacing:1.5px;color:var(--text3);text-transform:uppercase;}
+.clear-btn{background:none;border:1px solid var(--border);border-radius:6px;color:var(--text3);font-size:10px;padding:3px 8px;cursor:pointer;font-family:'Space Grotesk',sans-serif;transition:all .2s;}
+.clear-btn:hover{border-color:var(--border2);color:var(--text2);}
+.recent-list{max-height:240px;overflow-y:auto;}
+.recent-list::-webkit-scrollbar{width:3px;}
+.recent-list::-webkit-scrollbar-thumb{background:var(--border3);border-radius:2px;}
+.ritem{display:flex;align-items:center;gap:10px;padding:10px 16px;border-bottom:1px solid rgba(35,43,62,0.5);animation:resultSlide .25s ease;}
+.ritem:last-child{border-bottom:none;}
+.rdot{width:7px;height:7px;border-radius:50%;flex-shrink:0;}
+.rdot.found{background:var(--green2);box-shadow:0 0 5px var(--green2);}
+.rdot.notfound{background:var(--red2);box-shadow:0 0 5px var(--red2);}
+.rname{flex:1;font-size:13px;font-weight:700;color:var(--text);}
+.rtime{font-size:10px;color:var(--text3);font-family:'Space Grotesk',sans-serif;}
+.rempty{padding:20px;text-align:center;font-size:12px;color:var(--text3);}
+.ocr-raw{background:var(--panel2);border:1px solid var(--border);border-radius:8px;padding:10px 14px;font-size:11px;color:var(--text3);font-family:'Space Grotesk',sans-serif;line-height:1.6;word-break:break-all;min-height:36px;margin-top:12px;}
+.sec-lbl{font-family:'Chakra Petch',sans-serif;font-size:10px;letter-spacing:1.5px;color:var(--text3);text-transform:uppercase;margin-bottom:6px;margin-top:12px;}
+footer{position:relative;z-index:10;text-align:center;padding:14px;border-top:1px solid var(--border);font-size:10px;color:var(--text3);letter-spacing:.5px;}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <div>
+      <div class="logo-th">สแกนชื่อ AI — แก่นนครวิทยาลัย ROTC</div>
+      <div class="logo-en">AI Name Scanner &nbsp;·&nbsp; Real-time OCR Detection</div>
+    </div>
+  </div>
+  <div class="hdr-right">
+    <div class="live-chip"><div class="live-dot"></div>AI LIVE</div>
+    <div class="clock-box" id="clk">--:--:--</div>
+  </div>
+</header>
+
+<div class="main">
+
+  <!-- LEFT: CAMERA -->
+  <div>
+    <div class="cam-wrap" id="camWrap">
+      <div class="cam-header">
+        <div class="cam-title">&#128247; กล้อง AI OCR Real-time</div>
+        <div class="cam-status" id="camStatus">รอเริ่มต้น</div>
+      </div>
+      <div class="video-container">
+        <video id="camVideo" autoplay playsinline muted></video>
+        <canvas id="snapCanvas"></canvas>
+        <div class="scan-overlay" id="scanOverlay">
+          <div class="scan-corner tl"></div>
+          <div class="scan-corner tr"></div>
+          <div class="scan-corner bl"></div>
+          <div class="scan-corner br"></div>
+          <div class="scan-line"></div>
+          <div class="focus-box"><div class="focus-label">FOCUS AREA — จ่อชื่อตรงนี้</div></div>
+        </div>
+        <div class="start-overlay" id="startOverlay">
+          <button class="start-btn" onclick="startCamera()">&#128247; เปิดกล้อง AI</button>
+          <div class="start-hint">AI สแกนชื่ออัตโนมัติ ไม่ต้องกดถ่าย</div>
+        </div>
+      </div>
+      <div class="ai-bar">
+        <span class="ai-icon">&#129302;</span>
+        <span id="aiStatus">รอโหลดฐานข้อมูล...</span>
+        <span class="conf-badge" id="confBadge">IDLE</span>
+      </div>
+    </div>
+    <div class="sec-lbl">AI อ่านได้ (Raw OCR Output)</div>
+    <div class="ocr-raw" id="ocrRaw">รอสแกน...</div>
+  </div>
+
+  <!-- RIGHT PANEL -->
+  <div class="right-panel">
+
+    <div class="db-card" id="dbCard">
+      <div class="db-dot loading" id="dbDot"></div>
+      <div class="db-info">
+        <div class="db-label" id="dbLabel">กำลังโหลดฐานข้อมูล...</div>
+        <div class="db-sub" id="dbSub">Google Sheets · ROTC แก่นนครวิทยาลัย</div>
+      </div>
+    </div>
+
+    <div class="stats-row">
+      <div class="mini-stat"><div class="mini-num b" id="stTotal">—</div><div class="mini-lbl">รายชื่อทั้งหมด</div></div>
+      <div class="mini-stat"><div class="mini-num g" id="stFound">0</div><div class="mini-lbl">พบแล้ว</div></div>
+      <div class="mini-stat"><div class="mini-num r" id="stNotFound">0</div><div class="mini-lbl">ไม่พบ</div></div>
+    </div>
+
+    <div class="result-card" id="resultCard">
+      <div class="result-header">ผลการตรวจจับล่าสุด</div>
+      <div class="result-body">
+        <div class="result-name" id="resName">—</div>
+        <div class="result-status idle" id="resStatus">รอสแกนชื่อ...</div>
+        <div class="result-meta" id="resMeta">เปิดกล้องแล้วจ่อชื่อให้อยู่ในกรอบ FOCUS AREA</div>
+      </div>
+    </div>
+
+    <div class="recent-card">
+      <div class="recent-header">
+        <span>ประวัติการสแกน</span>
+        <button class="clear-btn" onclick="clearHistory()">ล้าง</button>
+      </div>
+      <div class="recent-list" id="recentList">
+        <div class="rempty">ยังไม่มีการสแกน</div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<footer>ระบบสแกนชื่อ AI — ROTC แก่นนครวิทยาลัย &nbsp;·&nbsp; Tesseract.js + Fuse.js &nbsp;·&nbsp; Real-time OCR</footer>
+
+<script>
+// ============================================================
+// CONFIG
+// ============================================================
+const SHEET_CSV_URL  = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTJYgnQ7H2dn1W7I96kwbwj-5TvBMCMqL7zbpSfn3xplpfWHe8ED1gAA39vaXuEr58fd7vJ14A4op3d/pub?gid=0&single=true&output=csv';
+const SCAN_INTERVAL  = 2000;    // สแกนทุก 2 วินาที
+const FUSE_THRESHOLD = 0.42;    // ความใกล้เคียง (ต่ำ=แม่นกว่า)
+const MIN_CHARS      = 2;
+
+// STATE
+let nameList=[], fuse=null, scanTimer=null, isScanning=false;
+let cntFound=0, cntNotFound=0, histList=[], lastResult='';
+
+// CLOCK
+setInterval(()=>document.getElementById('clk').textContent=new Date().toLocaleTimeString('th-TH'),1000);
+document.getElementById('clk').textContent=new Date().toLocaleTimeString('th-TH');
+
+// ============================================================
+// LOAD GOOGLE SHEET — 3 proxy fallbacks
+// ============================================================
+async function loadSheet(){
+  setDB('loading','กำลังโหลดฐานข้อมูล...','Google Sheets · ROTC');
+  const tries=[
+    ()=>fetch(SHEET_CSV_URL,{mode:'cors',credentials:'omit'}),
+    ()=>fetch('https://api.allorigins.win/get?url='+encodeURIComponent(SHEET_CSV_URL),{mode:'cors'}),
+    ()=>fetch('https://corsproxy.io/?'+encodeURIComponent(SHEET_CSV_URL),{mode:'cors'}),
+  ];
+  for(const fn of tries){
+    try{
+      const resp=await Promise.race([fn(),new Promise((_,r)=>setTimeout(()=>r(new Error('timeout')),9000))]);
+      if(!resp.ok) continue;
+      let text='';
+      const ct=(resp.headers.get('content-type')||'');
+      if(ct.includes('json')){const j=await resp.json();text=j.contents||'';}
+      else text=await resp.text();
+      if(!text||text.length<5) continue;
+      const parsed=parseCSV(text);
+      if(!parsed.length) continue;
+      nameList=parsed;
+      fuse=new Fuse(nameList,{keys:['fullname','fname','lname'],includeScore:true,threshold:FUSE_THRESHOLD,ignoreLocation:true,minMatchCharLength:MIN_CHARS});
+      setDB('ok','โหลดสำเร็จ · '+nameList.length+' รายชื่อ','Google Sheets · ROTC · พร้อมใช้งาน');
+      document.getElementById('stTotal').textContent=nameList.length;
+      document.getElementById('aiStatus').textContent='พร้อมสแกน · '+nameList.length+' รายชื่อในฐานข้อมูล';
+      document.getElementById('confBadge').textContent='READY';
+      return;
+    }catch(e){continue;}
+  }
+  setDB('err','โหลดฐานข้อมูลไม่สำเร็จ','ตรวจสอบ internet / Publish sheet');
+  document.getElementById('aiStatus').textContent='โหลดข้อมูลไม่สำเร็จ';
+}
+
+function parseCSV(csv){
+  const lines=csv.split('\n').filter(l=>l.trim());
+  if(lines.length<2) return [];
+  const res=[];
+  for(let i=1;i<lines.length;i++){
+    const cols=csvLine(lines[i]).map(c=>c.trim().replace(/^"|"$/g,''));
+    if(!cols||cols.length<2) continue;
+    const fname=(cols[0]||'').trim();
+    const lname=(cols[1]||'').trim();
+    if(!fname&&!lname) continue;
+    if(/^(ชื่อ|name|first|ลำดับ|no)/i.test(fname)) continue;
+    res.push({fullname:fname+(lname?' '+lname:''),fname,lname});
+  }
+  return res;
+}
+function csvLine(line){
+  const r=[];let cur='',q=false;
+  for(let i=0;i<line.length;i++){
+    const c=line[i];
+    if(c==='"'){q=!q;continue;}
+    if(c===','&&!q){r.push(cur);cur='';continue;}
+    cur+=c;
+  }
+  r.push(cur);return r;
+}
+function setDB(state,label,sub){
+  document.getElementById('dbDot').className='db-dot '+(state==='ok'?'ok':state==='loading'?'loading':'err');
+  document.getElementById('dbLabel').textContent=label;
+  document.getElementById('dbSub').textContent=sub;
+}
+
+// ============================================================
+// CAMERA
+// ============================================================
+async function startCamera(){
+  try{
+    const stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'},width:{ideal:1280},height:{ideal:720}}});
+    const vid=document.getElementById('camVideo');
+    vid.srcObject=stream;
+    await vid.play();
+    document.getElementById('startOverlay').classList.add('hidden');
+    document.getElementById('scanOverlay').classList.add('on');
+    document.getElementById('camStatus').textContent='กำลังสแกน';
+    document.getElementById('camStatus').className='cam-status active';
+    if(scanTimer) clearInterval(scanTimer);
+    scanTimer=setInterval(doScan,SCAN_INTERVAL);
+    doScan();
+  }catch(e){alert('ไม่สามารถเปิดกล้องได้\n'+e.message+'\nกรุณาอนุญาตการเข้าถึงกล้อง');}
+}
+
+// ============================================================
+// SCAN — เรียกทุก SCAN_INTERVAL อัตโนมัติ
+// ============================================================
+async function doScan(){
+  if(isScanning) return;
+  if(!fuse){document.getElementById('aiStatus').textContent='รอโหลดฐานข้อมูล...';return;}
+  const vid=document.getElementById('camVideo');
+  if(!vid.srcObject||vid.readyState<2) return;
+  isScanning=true;
+  document.getElementById('aiStatus').textContent='กำลังวิเคราะห์...';
+  document.getElementById('confBadge').textContent='SCAN';
+  try{
+    // Capture + crop focus area (center 62%x45%)
+    const canvas=document.getElementById('snapCanvas');
+    const ctx=canvas.getContext('2d');
+    canvas.width=vid.videoWidth||640;
+    canvas.height=vid.videoHeight||480;
+    ctx.drawImage(vid,0,0);
+    const sw=Math.floor(canvas.width*0.62),sh=Math.floor(canvas.height*0.45);
+    const sx=Math.floor((canvas.width-sw)/2),sy=Math.floor((canvas.height-sh)/2);
+    const crop=document.createElement('canvas');
+    crop.width=sw;crop.height=sh;
+    const cc=crop.getContext('2d');
+    cc.drawImage(canvas,sx,sy,sw,sh,0,0,sw,sh);
+    // Preprocess: grayscale + contrast
+    const id=cc.getImageData(0,0,sw,sh);
+    const d=id.data;
+    for(let i=0;i<d.length;i+=4){
+      const g=0.299*d[i]+0.587*d[i+1]+0.114*d[i+2];
+      const v=Math.max(0,Math.min(255,((g-128)*1.7)+128));
+      d[i]=d[i+1]=d[i+2]=v;
+    }
+    cc.putImageData(id,0,0);
+    // OCR
+    const r=await Tesseract.recognize(crop,'tha+eng',{logger:()=>{}});
+    const raw=(r.data.text||'').trim();
+    document.getElementById('ocrRaw').textContent=raw||'(ไม่พบข้อความ)';
+    if(!raw||raw.length<MIN_CHARS){
+      document.getElementById('aiStatus').textContent='ไม่พบข้อความในกรอบ';
+      document.getElementById('confBadge').textContent='WAIT';
+      isScanning=false;return;
+    }
+    const best=findBest(raw);
+    if(best){
+      const pct=Math.round((1-best.score)*100);
+      showResult(true,best.item.fullname,pct,raw);
+    }else{
+      showResult(false,raw.substring(0,30),0,raw);
+    }
+  }catch(e){
+    document.getElementById('aiStatus').textContent='OCR error: '+e.message.substring(0,40);
+  }
+  isScanning=false;
+}
+
+function findBest(raw){
+  const clean=raw.replace(/[^\u0E00-\u0E7Fa-zA-Z0-9\s]/g,'').trim();
+  if(!clean||clean.length<MIN_CHARS) return null;
+  let best=null;
+  const trySearch=q=>{
+    if(!q||q.length<MIN_CHARS) return;
+    const r=fuse.search(q);
+    if(r.length>0&&(!best||r[0].score<best.score)) best=r[0];
+  };
+  trySearch(clean);
+  clean.split('\n').map(l=>l.trim()).filter(l=>l.length>=MIN_CHARS).forEach(trySearch);
+  const words=clean.split(/\s+/).filter(w=>w.length>=2);
+  words.forEach((w,i)=>{
+    trySearch(w);
+    if(i+1<words.length) trySearch(w+' '+words[i+1]);
+  });
+  if(!best||best.score>FUSE_THRESHOLD) return null;
+  return best;
+}
+
+function showResult(found,name,pct,raw){
+  const rc=document.getElementById('resultCard');
+  const rn=document.getElementById('resName');
+  const rs=document.getElementById('resStatus');
+  const rm=document.getElementById('resMeta');
+  const cw=document.getElementById('camWrap');
+  rn.style.animation='none';rn.offsetHeight;rn.style.animation='resultSlide .25s ease';
+  if(found){
+    rn.textContent=name;
+    rs.textContent='✅ พบรายชื่อในฐานข้อมูล';
+    rs.className='result-status found';
+    rm.innerHTML='ความแม่นยำ: <span class="result-score'+(pct<70?' low':'')+'">'+pct+'%</span>';
+    rc.className='result-card found';
+    cw.className='cam-wrap found';
+    document.getElementById('aiStatus').textContent='พบ: '+name+' ('+pct+'%)';
+    document.getElementById('confBadge').textContent=pct+'%';
+    if(name!==lastResult){cntFound++;document.getElementById('stFound').textContent=cntFound;addHist(true,name,pct);lastResult=name;}
+  }else{
+    const disp=name.length>22?name.substring(0,20)+'…':name;
+    rn.textContent=disp||'(ไม่ชัดเจน)';
+    rs.textContent='❌ ไม่พบในฐานข้อมูล';
+    rs.className='result-status notfound';
+    rm.textContent='OCR อ่านได้: "'+(raw||'').substring(0,40)+'"';
+    rc.className='result-card notfound';
+    cw.className='cam-wrap notfound';
+    document.getElementById('aiStatus').textContent='ไม่พบชื่อที่ตรงกัน';
+    document.getElementById('confBadge').textContent='0%';
+    if(lastResult!=='notfound'){cntNotFound++;document.getElementById('stNotFound').textContent=cntNotFound;lastResult='notfound';}
+  }
+  setTimeout(()=>{cw.className='cam-wrap';rc.className='result-card';},3500);
+}
+
+function addHist(found,name,score){
+  const t=new Date().toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+  histList.unshift({found,name,score,t});
+  if(histList.length>60) histList.pop();
+  renderHist();
+}
+function renderHist(){
+  const el=document.getElementById('recentList');
+  if(!histList.length){el.innerHTML='<div class="rempty">ยังไม่มีการสแกน</div>';return;}
+  el.innerHTML=histList.map(h=>'<div class="ritem"><div class="rdot '+(h.found?'found':'notfound')+'"></div><div class="rname">'+h.name+'</div><div class="rtime">'+h.t+'</div></div>').join('');
+}
+function clearHistory(){
+  histList=[];cntFound=0;cntNotFound=0;
+  document.getElementById('stFound').textContent='0';
+  document.getElementById('stNotFound').textContent='0';
+  renderHist();
+}
+
+loadSheet();
+</script>
+</body>
+</html>
